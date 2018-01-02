@@ -1,15 +1,15 @@
 {
-  "name": "grunt-qunit-istanbul",
-  "description": "Run QUnit unit tests in a headless PhantomJS instance and create coverage reports with istanbul.",
+  "name": "grunt-puppeteer-istanbul",
+  "description": "Run QUnit unit tests in a headless Puppeteer instance and create coverage reports with istanbul.",
   "version": "1.0.0",
   "homepage": "https://github.com/asciidisco/grunt-qunit-istanbul",
   "author": {
-    "name": "Grunt Team",
-    "url": "http://gruntjs.com/"
+    "name": "Leonardo Lee",
+    "url": ""
   },
   "repository": {
     "type": "git",
-    "url": "git://github.com/asciidisco/grunt-qunit-istanbul.git"
+    "url": "git://github.com/lee-leonardo/grunt-puppeteer-istanbul.git"
   },
   "bugs": {
     "url": "https://github.com/asciidisco/grunt-qunit-istanbul/issues"
@@ -28,6 +28,7 @@
   },
   "dependencies": {
     "grunt-lib-phantomjs-istanbul": "~1.0.0",
+    "grunt-lib-puppeteer-istanbul": "0.0.1",
     "istanbul": "~0.4.5",
     "rimraf": "~2.5.4"
   },
@@ -47,6 +48,6 @@
   "files": [
     "tasks",
     "LICENSE-MIT",
-    "phantomjs"
+    "puppeteer"
   ]
 }
