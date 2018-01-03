@@ -1,5 +1,7 @@
 const EventEmitter = require("events");
 
+const harness = require('./harness')
+
 module.exports = class Bridge extends EventEmitter {
   constructor() {
     super();
@@ -11,40 +13,50 @@ module.exports = class Bridge extends EventEmitter {
 
   async exposeFunctions(page) {
     const self = this
-    await page.exposeFunction('harness_moduleDone', context => {
-      if (context.failed) {
-        var msg = "Module Failed: " + context.name + "\n" + self.testErrors.join("\n");
-        self.moduleErrors.push(msg);
-        self.testErrors = [];
-      }
-    });
 
-    await page.exposeFunction('harness_testDone', context => {
-      if (context.failed) {
-        var msg = "  Test Failed: " + context.name + self.assertionErrors.join("    ");
-        self.testErrors.push(msg + "F");
-        self.assertionErrors = [];
-      } else {
-        //TODO
-      }
-    });
+    await page.exposeFunction('harness_moduleDone', harness.module.done)
 
-    await page.exposeFunction('harness_log', context => {
-      if (context.result) {
-        return;
-      } // If success don't log
+    // await page.exposeFunction('harness_moduleDone', context => {
+    //   if (context.failed) {
+    //     var msg = "Module Failed: " + context.name + "\n" + self.testErrors.join("\n");
+    //     self.moduleErrors.push(msg);
+    //     self.testErrors = [];
+    //   }
+    // });
 
-      var msg = "\n    Assertion Failed:";
-      if (context.message) {
-        msg += " " + context.message;
-      }
 
-      if (context.expected) {
-        msg += "\n      Expected: " + context.expected + ", Actual: " + context.actual;
-      }
+    await page.exposeFunction('harness_testDone', harness.test.done)
 
-      self.assertionErrors.push(msg);
-    });
+    // await page.exposeFunction('harness_testDone', context => {
+    //   if (context.failed) {
+    //     var msg = "  Test Failed: " + context.name + self.assertionErrors.join("    ");
+    //     self.testErrors.push(msg + "F");
+    //     self.assertionErrors = [];
+    //   } else {
+    //     //TODO
+    //   }
+    // });
+
+    await page.exposeFunction('harness_log', harness.log)
+
+    // await page.exposeFunction('harness_log', context => {
+    //   if (context.result) {
+    //     return;
+    //   } // If success don't log
+
+    //   var msg = "\n    Assertion Failed:";
+    //   if (context.message) {
+    //     msg += " " + context.message;
+    //   }
+
+    //   if (context.expected) {
+    //     msg += "\n      Expected: " + context.expected + ", Actual: " + context.actual;
+    //   }
+
+    //   self.assertionErrors.push(msg);
+    // });
+
+    await page.exposeFunction('harness_done', harness.done)
 
     await page.exposeFunction('harness_done', context => {
       console.log("\n");

@@ -16,6 +16,16 @@ module.exports = function(grunt) {
 
   // External lib.
   var phantomjs = require('grunt-lib-phantomjs-istanbul').init(grunt);
+
+
+
+  //TODO this needs to be used rather than phantomjs
+  var PuppetMaster = require('grunt-lib-puppeteer-istanbul')
+
+
+
+
+
   var istanbul = require('istanbul');
   var instrumenter = new istanbul.Instrumenter();
   var collector = new istanbul.Collector();
@@ -182,7 +192,7 @@ module.exports = function(grunt) {
         disposeCollector: false
       }
     });
-	
+
     // Pass-through console.log statements.
     if(options.console) {
       phantomjs.on('console', console.log.bind(console));
@@ -276,6 +286,19 @@ module.exports = function(grunt) {
               }
             },
           });
+
+
+
+          //TODO setup options here!
+
+          var masterOfPuppets = new PuppetMaster(options);
+          masterOfPuppets.start();
+
+
+
+
+
+
         },
         // All tests have been run.
         function() {
