@@ -1,0 +1,4 @@
+{
+    "name": "qunit-harness",
+    "main": "./main.js"
+}
