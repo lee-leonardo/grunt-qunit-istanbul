@@ -8,7 +8,7 @@
 
 'use strict';
 
-module.exports = function(grunt) {
+module.exports = function (grunt) {
 
   // Nodejs libs.
   var path = require('path');
@@ -41,8 +41,10 @@ module.exports = function(grunt) {
   var asset = path.join.bind(null, __dirname, '..');
 
   // Allow an error message to retain its color when split across multiple lines.
-  var formatMessage = function(str) {
-    return String(str).split('\n').map(function(s) { return s.magenta; }).join('\n');
+  var formatMessage = function (str) {
+    return String(str).split('\n').map(function (s) {
+      return s.magenta;
+    }).join('\n');
   };
 
   // If options.force then log an error, otherwise exit with a warning
@@ -56,7 +58,7 @@ module.exports = function(grunt) {
 
   // Keep track of failed assertions for pretty-printing.
   var failedAssertions = [];
-  var logFailedAssertions = function() {
+  var logFailedAssertions = function () {
     var assertion;
     // Print each assertion error.
     while (assertion = failedAssertions.shift()) {
@@ -194,7 +196,7 @@ module.exports = function(grunt) {
     });
 
     // Pass-through console.log statements.
-    if(options.console) {
+    if (options.console) {
       phantomjs.on('console', console.log.bind(console));
     }
 
@@ -211,14 +213,20 @@ module.exports = function(grunt) {
     var done = this.async();
 
     // Reset status.
-    status = {failed: 0, passed: 0, total: 0, duration: 0, coverage: '-'};
+    status = {
+      failed: 0,
+      passed: 0,
+      total: 0,
+      duration: 0,
+      coverage: '-'
+    };
 
     // expand files for coverage
     if (options.coverage && options.coverage.src && options.coverage.src.length) {
-        options.coverage.include = grunt.file.expand(options.coverage.src);
-        var instrumentedFiles = {};
+      options.coverage.include = grunt.file.expand(options.coverage.src);
+      var instrumentedFiles = {};
     } else {
-        options.coverage.include = [];
+      options.coverage.include = [];
     }
 
     grunt.util.async.forEachSeries(options.coverage.include, function (file, cb) {
@@ -239,31 +247,31 @@ module.exports = function(grunt) {
 
       cb();
     }, function (err, result) {
-        // set transport options
-        if (!options.transport) {
-          options.transport = {};
-        }
+      // set transport options
+      if (!options.transport) {
+        options.transport = {};
+      }
 
-        // clear instrumented files folder & generate a new one
-        if (options.coverage && options.coverage.instrumentedFiles) {
-          if (!fs.existsSync(options.coverage.instrumentedFiles)) {
-            grunt.file.mkdir(options.coverage.instrumentedFiles);
-            options.transport.instrumentedFiles = options.coverage.instrumentedFiles;
-          } else {
-            options.transport.instrumentedFiles = fs.realpathSync(options.coverage.instrumentedFiles);
-            rimraf.sync(options.transport.instrumentedFiles);
-          }
+      // clear instrumented files folder & generate a new one
+      if (options.coverage && options.coverage.instrumentedFiles) {
+        if (!fs.existsSync(options.coverage.instrumentedFiles)) {
+          grunt.file.mkdir(options.coverage.instrumentedFiles);
+          options.transport.instrumentedFiles = options.coverage.instrumentedFiles;
+        } else {
+          options.transport.instrumentedFiles = fs.realpathSync(options.coverage.instrumentedFiles);
+          rimraf.sync(options.transport.instrumentedFiles);
         }
+      }
 
-        // write instrumented file information to an temporary file
-        // and transport the info to phantom
-        if (options.coverage && options.coverage.instrumentedFiles) {
-          grunt.file.write(tempFileCoverage, JSON.stringify(instrumentedFiles));
-          options.transport.coverage = fs.realpathSync(tempFileCoverage);
-        }
+      // write instrumented file information to an temporary file
+      // and transport the info to phantom
+      if (options.coverage && options.coverage.instrumentedFiles) {
+        grunt.file.write(tempFileCoverage, JSON.stringify(instrumentedFiles));
+        options.transport.coverage = fs.realpathSync(tempFileCoverage);
+      }
 
-        // Process each filepath in-order.
-        grunt.util.async.forEachSeries(urls, function(url, next) {
+      // Process each filepath in-order.
+      grunt.util.async.forEachSeries(urls, function (url, next) {
           var basename = path.basename(url);
           grunt.verbose.subhead('Testing ' + url + ' ').or.write('Testing ' + url + ' ');
 
@@ -276,7 +284,7 @@ module.exports = function(grunt) {
             // Additional PhantomJS options.
             options: options,
             // Do stuff when done.
-            done: function(err) {
+            done: function (err) {
               if (err) {
                 // If there was an error, abort the series.
                 done();
@@ -288,10 +296,126 @@ module.exports = function(grunt) {
           });
 
 
+          //TODO I need to work on this.
+          const done = grunt.async()
+
 
           //TODO setup options here!
+          options.resolve = function (isSuccessful, output) {
+            console.log('Test Finished');
+            //TODO add some output testing here?
+            done(isSuccessful);
+          };
+
+
+
+
+
 
           var masterOfPuppets = new PuppetMaster(options);
+
+
+
+
+          // QUnit hooks.
+          masterOfPuppets.on('qunit.moduleStart', function (name) {
+            unfinished[name] = true;
+            currentModule = name;
+          });
+
+          masterOfPuppets.on('qunit.moduleDone', function (name /*, failed, passed, total*/ ) {
+            delete unfinished[name];
+          });
+
+          masterOfPuppets.on('qunit.log', function (result, actual, expected, message, source) {
+            if (!result) {
+              failedAssertions.push({
+                actual: actual,
+                expected: expected,
+                message: message,
+                source: source,
+                testName: currentTest
+              });
+            }
+          });
+
+          masterOfPuppets.on('qunit.testStart', function (name) {
+            currentTest = (currentModule ? currentModule + ' - ' : '') + name;
+            grunt.verbose.write(currentTest + '...');
+          });
+
+          masterOfPuppets.on('qunit.coverage', function (coverage) {
+            if (coverage) {
+              // add coverage information to the collector
+              collector.add(coverage);
+            }
+          });
+
+          masterOfPuppets.on('qunit.testDone', function (name, failed /*, passed, total*/ ) {
+            // Log errors if necessary, otherwise success.
+            if (failed > 0) {
+              // list assertions
+              if (grunt.option('verbose')) {
+                grunt.log.error();
+                logFailedAssertions();
+              } else {
+                grunt.log.write('F'.red);
+              }
+            } else {
+              grunt.verbose.ok().or.write('.');
+            }
+          });
+
+          masterOfPuppets.on('qunit.done', function (failed, passed, total, duration) {
+            masterOfPuppets.halt();
+            status.failed += failed;
+            status.passed += passed;
+            status.total += total;
+            status.duration += duration;
+            // Print assertion errors here, if verbose mode is disabled.
+            if (!grunt.option('verbose')) {
+              if (failed > 0) {
+                grunt.log.writeln();
+                logFailedAssertions();
+              } else if (total === 0) {
+                warnUnlessForced('0/0 assertions ran (' + duration + 'ms)');
+              } else {
+                grunt.log.ok();
+              }
+            }
+          });
+
+          // Re-broadcast qunit events on grunt.event.
+          masterOfPuppets.on('qunit.*', function () {
+            var args = [this.event].concat(grunt.util.toArray(arguments));
+            grunt.event.emit.apply(grunt.event, args);
+          });
+
+          // Built-in error handlers.
+          masterOfPuppets.on('fail.load', function (url) {
+            masterOfPuppets.halt();
+            grunt.verbose.write('...');
+            grunt.event.emit('qunit.fail.load', url);
+            grunt.log.error('masterOfPuppets unable to load "' + url + '" URI.');
+            status.failed += 1;
+            status.total += 1;
+          });
+
+          masterOfPuppets.on('fail.timeout', function () {
+            masterOfPuppets.halt();
+            grunt.log.writeln();
+            grunt.event.emit('qunit.fail.timeout');
+            grunt.log.error('masterOfPuppets timed out, possibly due to a missing QUnit start() call.');
+            status.failed += 1;
+            status.total += 1;
+          });
+
+          masterOfPuppets.on('error.onError', function (msg, stackTrace) {
+            grunt.event.emit('qunit.error.onError', msg, stackTrace);
+            grunt.log.warn('masterOfPuppets error:\n', msg, '\n', stackTrace);
+          });
+
+
           masterOfPuppets.start();
 
 
@@ -301,23 +425,23 @@ module.exports = function(grunt) {
 
         },
         // All tests have been run.
-        function() {
+        function () {
           // Log results.
           if (status.total === 0) {
             warnUnlessForced('0/0 assertions ran (' + status.duration + 'ms)');
           } else {
-			if (status.failed > 0) {
-				warnUnlessForced(status.failed + '/' + status.total +
-					' assertions failed (' + status.duration + 'ms)');
-				// If the reportOnFail option is false (default) and if a test fails, then coverage results are not generated.
-				if(!options.coverage.reportOnFail) {
-					done();
-					return;
-				}
-			} else {
-				grunt.verbose.writeln();
-				grunt.log.ok(status.total + ' assertions passed (' + status.duration + 'ms)');
-			}
+            if (status.failed > 0) {
+              warnUnlessForced(status.failed + '/' + status.total +
+                ' assertions failed (' + status.duration + 'ms)');
+              // If the reportOnFail option is false (default) and if a test fails, then coverage results are not generated.
+              if (!options.coverage.reportOnFail) {
+                done();
+                return;
+              }
+            } else {
+              grunt.verbose.writeln();
+              grunt.log.ok(status.total + ' assertions passed (' + status.duration + 'ms)');
+            }
 
             // store coverage data for cmd output
             status.coverage = istanbul.utils.summarizeCoverage(collector.getFinalCoverage());
@@ -329,32 +453,44 @@ module.exports = function(grunt) {
 
               // check if a html report should be generated
               if (coverageOptions.htmlReport) {
-                Report.create('html', {dir: coverageOptions.htmlReport}).writeReport(collector, true);
+                Report.create('html', {
+                  dir: coverageOptions.htmlReport
+                }).writeReport(collector, true);
               }
 
               // check if a json report should be generated
               if (coverageOptions.jsonReport) {
-                Report.create('json', {dir: coverageOptions.jsonReport}).writeReport(collector, true);
+                Report.create('json', {
+                  dir: coverageOptions.jsonReport
+                }).writeReport(collector, true);
               }
 
               // check if a json summary report should be generate
               if (coverageOptions.jsonSummaryReport) {
-                Report.create('json-summary', {dir: coverageOptions.jsonSummaryReport}).writeReport(collector, true);
+                Report.create('json-summary', {
+                  dir: coverageOptions.jsonSummaryReport
+                }).writeReport(collector, true);
               }
 
               // check if a cobertura report should be generated
               if (coverageOptions.coberturaReport) {
-                Report.create('cobertura', {dir: coverageOptions.coberturaReport}).writeReport(collector, true);
+                Report.create('cobertura', {
+                  dir: coverageOptions.coberturaReport
+                }).writeReport(collector, true);
               }
 
               // check if a lcov report should be generated
               if (coverageOptions.lcovReport) {
-                Report.create('lcov', {dir: coverageOptions.lcovReport}).writeReport(collector, true);
+                Report.create('lcov', {
+                  dir: coverageOptions.lcovReport
+                }).writeReport(collector, true);
               }
 
               // check if a clover report should be generated
               if (coverageOptions.cloverReport) {
-                Report.create('clover', {dir: coverageOptions.cloverReport}).writeReport(collector, true);
+                Report.create('clover', {
+                  dir: coverageOptions.cloverReport
+                }).writeReport(collector, true);
               }
 
               // delete the instrumented files
@@ -375,7 +511,7 @@ module.exports = function(grunt) {
           // All done!
           done();
         });
-      });
     });
+  });
 
 };
