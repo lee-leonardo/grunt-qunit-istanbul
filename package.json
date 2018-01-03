@@ -1,7 +1,7 @@
 {
   "name": "grunt-puppeteer-istanbul",
   "description": "Run QUnit unit tests in a headless Puppeteer instance and create coverage reports with istanbul.",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "homepage": "https://github.com/asciidisco/grunt-qunit-istanbul",
   "author": {
     "name": "Leonardo Lee",
@@ -21,7 +21,7 @@
     }
   ],
   "engines": {
-    "node": ">= 0.10.0"
+    "node": ">= 7.6.0"
   },
   "scripts": {
     "test": "grunt test"
