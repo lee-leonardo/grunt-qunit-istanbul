@@ -27,8 +27,9 @@
     "test": "grunt test"
   },
   "dependencies": {
+    "async": "^2.6.0",
     "grunt-lib-phantomjs-istanbul": "~1.0.0",
-    "grunt-lib-puppeteer-istanbul": "0.0.1",
+    "grunt-lib-puppeteer-istanbul": "0.0.2",
     "istanbul": "~0.4.5",
     "rimraf": "~2.5.4"
   },
