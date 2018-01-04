@@ -15,21 +15,13 @@ module.exports = function (grunt) {
   var fs = require('fs');
 
   // External lib.
-  var phantomjs = require('grunt-lib-phantomjs-istanbul').init(grunt);
-
-
-
-  //TODO this needs to be used rather than phantomjs
   var PuppetMaster = require('grunt-lib-puppeteer-istanbul')
-
-
-
-
 
   var istanbul = require('istanbul');
   var instrumenter = new istanbul.Instrumenter();
   var collector = new istanbul.Collector();
   var rimraf = require('rimraf');
+  var async = require('async');
 
   // Keep track of the last-started module, test and status.
   var options, currentModule, currentTest, status;
@@ -75,118 +67,23 @@ module.exports = function (grunt) {
     }
   };
 
-  var checkCodeCoverage = function(threshold, value, printName) {
-    if(threshold && value < threshold) {
+  var checkCodeCoverage = function (threshold, value, printName) {
+    if (threshold && value < threshold) {
       grunt.warn('Code coverage for ' + printName + ' was below threshold (' + value + '% < ' + threshold + '%)');
     }
   };
 
-  // QUnit hooks.
-  phantomjs.on('qunit.moduleStart', function(name) {
-    unfinished[name] = true;
-    currentModule = name;
-  });
-
-  phantomjs.on('qunit.moduleDone', function(name/*, failed, passed, total*/) {
-    delete unfinished[name];
-  });
-
-  phantomjs.on('qunit.log', function(result, actual, expected, message, source) {
-    if (!result) {
-      failedAssertions.push({
-        actual: actual, expected: expected, message: message, source: source,
-        testName: currentTest
-      });
-    }
-  });
-
-  phantomjs.on('qunit.testStart', function(name) {
-    currentTest = (currentModule ? currentModule + ' - ' : '') + name;
-    grunt.verbose.write(currentTest + '...');
-  });
-
-  phantomjs.on('qunit.coverage', function(coverage) {
-    if (coverage) {
-      // add coverage information to the collector
-      collector.add(coverage);
-    }
-  });
-
-  phantomjs.on('qunit.testDone', function(name, failed/*, passed, total*/) {
-    // Log errors if necessary, otherwise success.
-    if (failed > 0) {
-      // list assertions
-      if (grunt.option('verbose')) {
-        grunt.log.error();
-        logFailedAssertions();
-      } else {
-        grunt.log.write('F'.red);
-      }
-    } else {
-      grunt.verbose.ok().or.write('.');
-    }
-  });
-
-  phantomjs.on('qunit.done', function(failed, passed, total, duration) {
-    phantomjs.halt();
-    status.failed += failed;
-    status.passed += passed;
-    status.total += total;
-    status.duration += duration;
-    // Print assertion errors here, if verbose mode is disabled.
-    if (!grunt.option('verbose')) {
-      if (failed > 0) {
-        grunt.log.writeln();
-        logFailedAssertions();
-      } else if (total === 0) {
-        warnUnlessForced('0/0 assertions ran (' + duration + 'ms)');
-      } else {
-        grunt.log.ok();
-      }
-    }
-  });
-
-  // Re-broadcast qunit events on grunt.event.
-  phantomjs.on('qunit.*', function() {
-    var args = [this.event].concat(grunt.util.toArray(arguments));
-    grunt.event.emit.apply(grunt.event, args);
-  });
-
-  // Built-in error handlers.
-  phantomjs.on('fail.load', function(url) {
-    phantomjs.halt();
-    grunt.verbose.write('...');
-    grunt.event.emit('qunit.fail.load', url);
-    grunt.log.error('PhantomJS unable to load "' + url + '" URI.');
-    status.failed += 1;
-    status.total += 1;
-  });
-
-  phantomjs.on('fail.timeout', function() {
-    phantomjs.halt();
-    grunt.log.writeln();
-    grunt.event.emit('qunit.fail.timeout');
-    grunt.log.error('PhantomJS timed out, possibly due to a missing QUnit start() call.');
-    status.failed += 1;
-    status.total += 1;
-  });
-
-  phantomjs.on('error.onError', function (msg, stackTrace) {
-    grunt.event.emit('qunit.error.onError', msg, stackTrace);
-    grunt.log.warn('PhantomJS error:\n', msg, '\n', stackTrace);
-  });
-
-  grunt.registerMultiTask('qunit', 'Run QUnit unit tests in a headless PhantomJS instance.', function() {
+  grunt.registerMultiTask('qunit', 'Run QUnit unit tests in a headless PhantomJS instance.', function () {
     // Merge task-specific and/or target-specific options with these defaults.
     options = this.options({
       // Default PhantomJS timeout.
       timeout: 5000,
       // QUnit-PhantomJS bridge file to be injected.
-      inject: asset('phantomjs/bridge.js'),
+      inject: asset('puppeteer/bridge.js'),
       // Explicit non-file URLs to test.
       urls: [],
       force: false,
-      // Connect phantomjs console output to grunt output
+      // Connect puppeteer console output to grunt output
       console: true,
       // Explicitly define all coverage options (as empty)
       coverage: {
@@ -194,12 +91,6 @@ module.exports = function (grunt) {
         disposeCollector: false
       }
     });
-
-    // Pass-through console.log statements.
-    if (options.console) {
-      phantomjs.on('console', console.log.bind(console));
-    }
-
 
     if (options.coverage && options.coverage.disposeCollector) {
       collector.dispose();
@@ -210,7 +101,7 @@ module.exports = function (grunt) {
     var urls = options.urls.concat(this.filesSrc);
 
     // This task is asynchronous.
-    var done = this.async();
+    // var done = grunt.async();
 
     // Reset status.
     status = {
@@ -271,6 +162,7 @@ module.exports = function (grunt) {
       }
 
       // Process each filepath in-order.
+      // async.anySeries(urls, function (url, next) {
       grunt.util.async.forEachSeries(urls, function (url, next) {
           var basename = path.basename(url);
           grunt.verbose.subhead('Testing ' + url + ' ').or.write('Testing ' + url + ' ');
@@ -280,25 +172,6 @@ module.exports = function (grunt) {
 
           // Launch PhantomJS.
           grunt.event.emit('qunit.spawn', url);
-          phantomjs.spawn(url, {
-            // Additional PhantomJS options.
-            options: options,
-            // Do stuff when done.
-            done: function (err) {
-              if (err) {
-                // If there was an error, abort the series.
-                done();
-              } else {
-                // Otherwise, process next url.
-                next();
-              }
-            },
-          });
-
-
-          //TODO I need to work on this.
-          const done = grunt.async()
-
 
           //TODO setup options here!
           options.resolve = function (isSuccessful, output) {
@@ -307,122 +180,115 @@ module.exports = function (grunt) {
             done(isSuccessful);
           };
 
-
-
-
-
-
           var masterOfPuppets = new PuppetMaster(options);
 
+          // // QUnit hooks.
+              // Pass-through console.log statements.
+          if (options.console) {
+            masterOfPuppets.listenOn({
+              'console': console.log.bind(console)
+            })
+          }
 
 
-
-          // QUnit hooks.
-          masterOfPuppets.on('qunit.moduleStart', function (name) {
-            unfinished[name] = true;
-            currentModule = name;
-          });
-
-          masterOfPuppets.on('qunit.moduleDone', function (name /*, failed, passed, total*/ ) {
-            delete unfinished[name];
-          });
-
-          masterOfPuppets.on('qunit.log', function (result, actual, expected, message, source) {
-            if (!result) {
-              failedAssertions.push({
-                actual: actual,
-                expected: expected,
-                message: message,
-                source: source,
-                testName: currentTest
-              });
-            }
-          });
-
-          masterOfPuppets.on('qunit.testStart', function (name) {
-            currentTest = (currentModule ? currentModule + ' - ' : '') + name;
-            grunt.verbose.write(currentTest + '...');
-          });
-
-          masterOfPuppets.on('qunit.coverage', function (coverage) {
-            if (coverage) {
-              // add coverage information to the collector
-              collector.add(coverage);
-            }
-          });
-
-          masterOfPuppets.on('qunit.testDone', function (name, failed /*, passed, total*/ ) {
-            // Log errors if necessary, otherwise success.
-            if (failed > 0) {
-              // list assertions
-              if (grunt.option('verbose')) {
-                grunt.log.error();
-                logFailedAssertions();
-              } else {
-                grunt.log.write('F'.red);
+          masterOfPuppets.listenOn({
+            'qunit.moduleStart': function (name) {
+              unfinished[name] = true;
+              currentModule = name;
+            },
+            'qunit.moduleDone': function (name /*, failed, passed, total*/ ) {
+              delete unfinished[name];
+            },
+            'qunit.log': function (result, actual, expected, message, source) {
+              if (!result) {
+                failedAssertions.push({
+                  actual: actual,
+                  expected: expected,
+                  message: message,
+                  source: source,
+                  testName: currentTest
+                });
               }
-            } else {
-              grunt.verbose.ok().or.write('.');
-            }
-          });
-
-          masterOfPuppets.on('qunit.done', function (failed, passed, total, duration) {
-            masterOfPuppets.halt();
-            status.failed += failed;
-            status.passed += passed;
-            status.total += total;
-            status.duration += duration;
-            // Print assertion errors here, if verbose mode is disabled.
-            if (!grunt.option('verbose')) {
+            },
+            'qunit.testStart': function (name) {
+              currentTest = (currentModule ? currentModule + ' - ' : '') + name;
+              grunt.verbose.write(currentTest + '...');
+            },
+            'qunit.coverage': function (coverage) {
+              if (coverage) {
+                // add coverage information to the collector
+                collector.add(coverage);
+              }
+            },
+            'qunit.testDone': function (name, failed /*, passed, total*/ ) {
+              // Log errors if necessary, otherwise success.
               if (failed > 0) {
-                grunt.log.writeln();
-                logFailedAssertions();
-              } else if (total === 0) {
-                warnUnlessForced('0/0 assertions ran (' + duration + 'ms)');
+                // list assertions
+                if (grunt.option('verbose')) {
+                  grunt.log.error();
+                  logFailedAssertions();
+                } else {
+                  grunt.log.write('F'.red);
+                }
               } else {
-                grunt.log.ok();
+                grunt.verbose.ok().or.write('.');
               }
+            },
+            'qunit.done': function (failed, passed, total, duration) {
+              masterOfPuppets.halt();
+              status.failed += failed;
+              status.passed += passed;
+              status.total += total;
+              status.duration += duration;
+              // Print assertion errors here, if verbose mode is disabled.
+              if (!grunt.option('verbose')) {
+                if (failed > 0) {
+                  grunt.log.writeln();
+                  logFailedAssertions();
+                } else if (total === 0) {
+                  warnUnlessForced('0/0 assertions ran (' + duration + 'ms)');
+                } else {
+                  grunt.log.ok();
+                }
+              }
+            },
+
+            //TODO wildcard is not supported by EventEmitter
+            'qunit.*': function () {
+              var args = [this.event].concat(grunt.util.toArray(arguments));
+              grunt.event.emit.apply(grunt.event, args);
+            },
+
+            // TODO need to not catch all errors and handle them correctly
+            'error': function(err) {
+              if (err.code !== 'ENOENT' || err.code !== 'ECONNREFUSED') {
+                //TODO handle
+              }
+              // console.log(err)
+            },
+            'fail.load': function (url) {
+              masterOfPuppets.halt();
+              grunt.verbose.write('...');
+              grunt.event.emit('qunit.fail.load', url);
+              grunt.log.error('masterOfPuppets unable to load "' + url + '" URI.');
+              status.failed += 1;
+              status.total += 1;
+            },
+            'fail.timeout': function () {
+              masterOfPuppets.halt();
+              grunt.log.writeln();
+              grunt.event.emit('qunit.fail.timeout');
+              grunt.log.error('masterOfPuppets timed out, possibly due to a missing QUnit start() call.');
+              status.failed += 1;
+              status.total += 1;
+            },
+            'error.onError': function (msg, stackTrace) {
+              grunt.event.emit('qunit.error.onError', msg, stackTrace);
+              grunt.log.warn('masterOfPuppets error:\n', msg, '\n', stackTrace);
             }
-          });
-
-          // Re-broadcast qunit events on grunt.event.
-          masterOfPuppets.on('qunit.*', function () {
-            var args = [this.event].concat(grunt.util.toArray(arguments));
-            grunt.event.emit.apply(grunt.event, args);
-          });
-
-          // Built-in error handlers.
-          masterOfPuppets.on('fail.load', function (url) {
-            masterOfPuppets.halt();
-            grunt.verbose.write('...');
-            grunt.event.emit('qunit.fail.load', url);
-            grunt.log.error('masterOfPuppets unable to load "' + url + '" URI.');
-            status.failed += 1;
-            status.total += 1;
-          });
-
-          masterOfPuppets.on('fail.timeout', function () {
-            masterOfPuppets.halt();
-            grunt.log.writeln();
-            grunt.event.emit('qunit.fail.timeout');
-            grunt.log.error('masterOfPuppets timed out, possibly due to a missing QUnit start() call.');
-            status.failed += 1;
-            status.total += 1;
-          });
-
-          masterOfPuppets.on('error.onError', function (msg, stackTrace) {
-            grunt.event.emit('qunit.error.onError', msg, stackTrace);
-            grunt.log.warn('masterOfPuppets error:\n', msg, '\n', stackTrace);
-          });
-
+          })
 
           masterOfPuppets.start();
-
-
-
-
-
-
         },
         // All tests have been run.
         function () {
